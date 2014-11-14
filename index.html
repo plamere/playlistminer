@@ -52,7 +52,7 @@
             <p><a class="btn btn-primary btn-lg" id='login-button' 
                         role="button">Login with Spotify</a></p>
         </div>
-        <div class='intro-form' id="search-form" class="row">
+        <div id="search-form" class="intro-form row">
            <div class="col-xs-offset-1 col-xs-10 col-sm-offset-3 col-sm-6">
             <input type="text" class="form-control input-lg"  
                 id="playlist-terms" placeholder="'work out' OR workout " value="">
@@ -78,7 +78,7 @@
           </div>
 
           <!-- <button class='stop-button btn btn-primary'>  stop </button> -->
-          <div class='button-row' id=''>
+          <div class='button-row'>
               We've found 
               <span class="total-playlists"> </span> matching playlists with  
               a total of <span class='total-tracks'> 0 </span> tracks.
@@ -166,9 +166,8 @@
 "use strict";
 
 var maxPlaylists = 1000;
-var totalPlaylists = 0;
 var totalTracks = 0;
-var maxOffsetToDisplay = 1000;
+var maxPlaylistsToDisplay = 1000;
 var abortFetching = false;
 var allPlaylists = [];
 var topTracks = null;
@@ -236,15 +235,19 @@ function processPlaylists(data) {
     $("#matching").text(matching);
     var tbody = $("#playlist-items");
     _.each(data.playlists.items, function(item, which) {
-        if (data.playlists.offset < maxOffsetToDisplay) {
-            addItem(tbody, data.playlists.offset + which + 1, item);
+        if (!item.collaborative) {
+            if (allPlaylists.length < maxPlaylistsToDisplay) {
+                addItem(tbody, data.playlists.offset + which + 1, item);
+            }
+            if (allPlaylists.length < maxPlaylists)  {
+                allPlaylists.push( [item.owner.id, item.id]);
+                totalTracks += item.tracks.total;
+            }
+        } else {
         }
-        allPlaylists.push( [item.owner.id, item.id]);
-        totalTracks += item.tracks.total;
     });
 
-    totalPlaylists += data.playlists.items.length;
-
+    var totalPlaylists = allPlaylists.length;
     var total = Math.min(data.playlists.total, maxPlaylists);
     var percentComplete = Math.round(totalPlaylists * 100 / total);
 
@@ -270,7 +273,6 @@ function processPlaylistError() {
 }
 
 function findMatchingPlaylists(text) {
-    totalPlaylists = 0;
     totalTracks = 0;
     abortFetching = false;
     allPlaylists = [];
@@ -328,7 +330,6 @@ function saveTidsToPlaylist(playlist, tids) {
     var url = "https://api.spotify.com/v1/users/" + playlist.owner.id + 
          "/playlists/" + playlist.id + '/tracks';
 
-    console.log('save', playlist);
     postSpotify(url, {uris: tids}, function(ok, data) {
         if (ok) {
             info("Playlist saved");
@@ -427,7 +428,6 @@ function fetchAllTracksFromPlaylist() {
                             }
                         });
                     } else {
-                        // console.log('bad playlist', tinfo);
                     }
                     refreshTrackList(allTracks);
                     fetchNextTracksFromPlaylist();

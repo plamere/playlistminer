@@ -9,6 +9,6 @@ all of the songs across all of these playlists and find the top 100 songs that o
 most frequently in the matching playlist. These top songs can then be saved
 to your own playlist.
 
-Crowdlister is online at http://static.echonest.com/crowdlister
+Crowdlister is online at TBD
 
 It makes use of the Spotify Web API.
