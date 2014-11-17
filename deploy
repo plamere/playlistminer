@@ -1,1 +1,2 @@
-s3cmd sync --acl-public *  s3://static.echonest.com/crowdlister/
+s3cmd sync --acl-public *  s3://static.echonest.com/playlistminer/
+# s3cmd put --acl-public redirect.html s3://static.echonest.com/crowdlister/index.html

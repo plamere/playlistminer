@@ -9,7 +9,7 @@
     <link type="text/css" href="styles.css" rel="stylesheet" />
     <link href="dist/sp-bootstrap.min.css" rel="stylesheet" media="screen">
     <link rel="shortcut icon" href="images/favicon.png">
-    <title>CrowdLister</title>
+    <title>The Playlist Miner</title>
     <!-- Custom styles for this template -->
     <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
     <!--[if lt IE 9]>
@@ -20,27 +20,27 @@
 </head>
   <body >
     <div class="navbar navbar-default" role="navigation">
-      <div class="container-fluid">
+      <div class="container">
         <div class="navbar-header">
-          <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
-            <span class="sr-only">Toggle navigation</span>
-          </button>
-          <a id='brand' class="navbar-brand" href="index.html"><span>CrowdLister</span></a>
+          <a class="navbar-brand" href="index.html">
+            <span class="navbar-logo">Spotify</span>
+            <span class="navbar-title">Playlist Miner</span>
+          </a>
         </div>
         <div class="navbar-collapse collapse">
-          <a href="https://www.spotify.com/ca/download" 
-            class="btn btn-primary navbar-btn navbar-right">Get Spotify</a>
-        </div>
+          <a href="http://www.spotify.com" class="btn btn-primary navbar-btn navbar-right">Get
+          Spotify</a>
+        </div><!--/.navbar-collapse -->
       </div>
     </div>
 
     <!-- Main jumbotron for a primary marketing message or call to action -->
     <div id='top' class="jumbotron">
       <div class="container-fluid" id="jumbo-dialog">
-        <h1 id='attitle' >CrowdLister</h1>
+        <h1 id='attitle' >The Playlist Miner</h1>
         <p  class="lead">  The best DJ is everybody.</p>
         <p id='ttext'>
-            CrowdLister aggregrates the top tracks from
+            The Playlist Miner aggregrates the top tracks from
             the most popular public playlists on Spotify that match your 
             search criteria.  Looking for the best <i>workout</i> tracks?  
             Enter the term <i>workout</i> and we'll find
@@ -88,7 +88,8 @@
               Press
               <b> Find top tracks </b> to build a playlist of the top tracks
               across all of these playlists or go back and 
-              <a href="index.html">refine your query</a>.  <div class='obutton-row'>
+              <a href="index.html">refine your query</a>.  
+              <div class='obutton-row'>
                   <button id='fetch-tracks' class='btn btn-primary'>  Find top tracks</button>
               </div>
              </div>
@@ -137,12 +138,14 @@
               </div>
           </div>
 
+          <label><input id='norm-for-pop' type='checkbox'> Prefer more distinctive 
+           <span class='keywords'></span> tracks </label>
           <table class="table table-striped table-bordered">
             <thead>
                 <tr> <th style="width:5%"> # </th> 
                      <th style="width:50%"> Title </th> 
                      <th style="width:35%"> Artist </th>  
-                     <th style="width:10%"> Count</th> </tr>
+                     <th style="width:10%"> Score</th> </tr>
             </thead>
             <tbody id="track-items"> </tbody>
           </table>
@@ -166,12 +169,19 @@
 "use strict";
 
 var maxPlaylists = 1000;
-var totalTracks = 0;
 var maxPlaylistsToDisplay = 1000;
+var credentials = null;
+var ppm = null;
+
+var totalTracks = 0;
+var totalPlaylistCount = 0;
+
 var abortFetching = false;
+var popNormalize = false;
+
 var allPlaylists = [];
 var topTracks = null;
-var credentials = null;
+var allTracks = {};
 
 function error(s) {
     info(s);
@@ -302,14 +312,31 @@ function go() {
     }
 }
 
+function getTrackScore(track) {
+    if (popNormalize) {
+        var ppm_score;
+        if (track.id in ppm) {
+            ppm_score = ppm[track.id];
+        } else {
+            ppm_score = ppm['backoff_idf'];
+        }
+        var score = 1000. * track.count / totalPlaylistCount * ppm_score;
+        return score
+    } else {
+        return track.count;
+    }
+}
 
 function refreshTrackList(allTracks) {
+    info("");
+
     var tracks = [];
     _.each(allTracks, function(track, id) {
+        track.score = getTrackScore(track);
         tracks.push(track);
     });
     tracks.sort(function(a,b) {
-        return a.count - b.count;
+        return a.score - b.score;
     });
     tracks.reverse();
 
@@ -321,7 +348,7 @@ function refreshTrackList(allTracks) {
         tr.append( $("<td>").text(i + 1));
         tr.append( $("<td>").append( $("<a>").attr('href', track.uri).text(track.name)));
         tr.append( $("<td>").text(track.artists[0].name));
-        tr.append( $("<td>").text(track.count));
+        tr.append( $("<td>").text(Math.round(track.score)));
         table.append(tr);
     });
 }
@@ -375,10 +402,12 @@ function fetchAllTracksFromPlaylist() {
     $("#track-table").show();
     $("#ready-to-save").hide();
     $("#fetching-tracks").show();
-    var allTracks = {};
+    
+    allTracks = {};
 
     var queue = allPlaylists.slice(0);
     var totalTracks = 0;
+    totalPlaylistCount = 0;
 
     function isGoodPlaylist(items) {
         // good playlist needs multiple artists and
@@ -415,6 +444,7 @@ function fetchAllTracksFromPlaylist() {
                     $("#tt-total-tracks").text(totalTracks);
                     $("#tt-unique-tracks").text(Object.keys(allTracks).length);
                     if (isGoodPlaylist(data.items)) {
+                        totalPlaylistCount += 1;
                         _.each(data.items, function(item) {
                             if (item.track) {
                                 if (item.track.id) {
@@ -434,7 +464,7 @@ function fetchAllTracksFromPlaylist() {
                 }, 
 
                 function() {
-                    error("problem reading tracks");
+                    error("trouble fetching tracks");
                     fetchNextTracksFromPlaylist();
                 }
             );
@@ -480,14 +510,25 @@ function initApp() {
     $("#save-button").on('click', function() {
         savePlaylist();
     });
+
+    $("#norm-for-pop").on('click', function() {
+        popNormalize = $("#norm-for-pop").is(':checked');
+        refreshTrackList(allTracks);
+    });
+
+    loadPPM();
 }
 
 
 function loginWithSpotify() {
     var client_id = '4042a231fe624583a694f1d6cf9e25b5';
-    var redirect_uri = 'http://localhost:8000/index.html';
-    var redirect_uri = 'http://static.echonest.com/crowdlister/index.html';
+    var redirect_uri = 'http://static.echonest.com/playlistminer/index.html';
     var scopes = 'playlist-modify-public';
+
+    if (document.location.hostname == 'localhost') {
+        redirect_uri = 'http://localhost:8000/index.html';
+    }
+
     var url = 'https://accounts.spotify.com/authorize?client_id=' + client_id +
         '&response_type=token' +
         '&scope=' + encodeURIComponent(scopes) + 
@@ -498,6 +539,17 @@ function loginWithSpotify() {
 
 function getTime() {
     return Math.round(new Date().getTime() / 1000);
+}
+
+function loadPPM() {
+    $.getJSON('ppm.js').then(
+        function(data) {
+            ppm = data;
+        },
+        function() {
+            error("can't load ppm");
+        }
+    );
 }
 
 function performAuthDance() {
