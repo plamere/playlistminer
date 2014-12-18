@@ -341,15 +341,16 @@ function refreshTrackList(allTracks) {
 
     topTracks = tracks.slice(0, 100);
     var table = $("#track-items");
-    table.empty();
+    var newRows = [];
     _.each(topTracks, function(track, i) {
         var tr = $("<tr>");
         tr.append( $("<td>").text(i + 1));
         tr.append( $("<td>").append( $("<a>").attr('href', track.uri).text(track.name)));
         tr.append( $("<td>").text(track.artists[0].name));
         tr.append( $("<td>").text(Math.round(track.score)));
-        table.append(tr);
+        newRows.push(tr);
     });
+    table.empty().append(newRows);
 }
 
 function saveTidsToPlaylist(playlist, tids) {
