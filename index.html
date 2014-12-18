@@ -41,20 +41,20 @@
         <p  class="lead">  The best DJ is everybody.</p>
         <p id='ttext'>
             The Playlist Miner aggregrates the top tracks from
-            the most popular public playlists on Spotify that match your 
-            search criteria.  Looking for the best <i>workout</i> tracks?  
+            the most popular public playlists on Spotify that match your
+            search criteria.  Looking for the best <i>workout</i> tracks?
             Enter the term <i>workout</i> and we'll find
             the tracks that have appeared most frequently in workout playlists.
         </p>
         <div class='intro-form' id='login-form'>
             <p> To get started, login with your Spotify credentials.
             </p>
-            <p><a class="btn btn-primary btn-lg" id='login-button' 
+            <p><a class="btn btn-primary btn-lg" id='login-button'
                         role="button">Login with Spotify</a></p>
         </div>
         <div id="search-form" class="intro-form row">
            <div class="col-xs-offset-1 col-xs-10 col-sm-offset-3 col-sm-6">
-            <input type="text" class="form-control input-lg"  
+            <input type="text" class="form-control input-lg"
                 id="playlist-terms" placeholder="'work out' OR workout " value="">
                 <br>
                 <button class="btn btn-primary btn-lg" id='go'
@@ -79,16 +79,16 @@
 
           <!-- <button class='stop-button btn btn-primary'>  stop </button> -->
           <div class='button-row'>
-              We've found 
-              <span class="total-playlists"> </span> matching playlists with  
+              We've found
+              <span class="total-playlists"> </span> matching playlists with
               a total of <span class='total-tracks'> 0 </span> tracks.
               <br>
-              
+
             <div id='fetch-tracks-ready'>
               Press
               <b> Find top tracks </b> to build a playlist of the top tracks
-              across all of these playlists or go back and 
-              <a href="index.html">refine your query</a>.  
+              across all of these playlists or go back and
+              <a href="index.html">refine your query</a>.
               <div class='obutton-row'>
                   <button id='fetch-tracks' class='btn btn-primary'>  Find top tracks</button>
               </div>
@@ -97,9 +97,9 @@
 
           <table class="table table-striped table-bordered">
             <thead>
-                <tr> <th style="width:5%"> # </th> 
-                     <th style="width: 85%"> Playlist name </th> 
-                     <th style="width:10%"> # Tracks </th> 
+                <tr> <th style="width:5%"> # </th>
+                     <th style="width: 85%"> Playlist name </th>
+                     <th style="width:10%"> # Tracks </th>
                 </tr>
             </thead>
             <tbody id="playlist-items"> </tbody>
@@ -110,14 +110,14 @@
            <h1> <a id='playlist-name'>Top <span class='keywords'> </span> Tracks  </a></h1>
            <div class="button-row">
               <div id='fetching-tracks'>
-                Aggregating <span id='tt-total-tracks'> </span> tracks from all 
+                Aggregating <span id='tt-total-tracks'> </span> tracks from all
                     of the <span class= "keywords"></span> playlists.
                 <p>
                 You can stop this at any time, but the longer you wait, the
                 better your results.
                 </p>
-                  <button id='stop-button' 
-                    class='padded-button stop-button btn btn-primary'>  
+                  <button id='stop-button'
+                    class='padded-button stop-button btn btn-primary'>
                     stop </button>
               </div>
               <div id='ready-to-save'>
@@ -125,8 +125,8 @@
                   can save these as your own Spotify playlist by clicking the
                   button.
                   <br>
-                  <button id="save-button" 
-                    class="padded-button btn btn-primary btn-lg"> 
+                  <button id="save-button"
+                    class="padded-button btn btn-primary btn-lg">
                         Save Playlist to Spotify</button>
               </div>
            </div>
@@ -138,13 +138,13 @@
               </div>
           </div>
 
-          <label><input id='norm-for-pop' type='checkbox'> Prefer more distinctive 
+          <label><input id='norm-for-pop' type='checkbox'> Prefer more distinctive
            <span class='keywords'></span> tracks </label>
           <table class="table table-striped table-bordered">
             <thead>
-                <tr> <th style="width:5%"> # </th> 
-                     <th style="width:50%"> Title </th> 
-                     <th style="width:35%"> Artist </th>  
+                <tr> <th style="width:5%"> # </th>
+                     <th style="width:50%"> Title </th>
+                     <th style="width:35%"> Artist </th>
                      <th style="width:10%"> Score</th> </tr>
             </thead>
             <tbody id="track-items"> </tbody>
@@ -336,25 +336,25 @@ function refreshTrackList(allTracks) {
         tracks.push(track);
     });
     tracks.sort(function(a,b) {
-        return a.score - b.score;
+        return b.score - a.score;
     });
-    tracks.reverse();
 
     topTracks = tracks.slice(0, 100);
     var table = $("#track-items");
-    table.empty();
+    var newRows = [];
     _.each(topTracks, function(track, i) {
         var tr = $("<tr>");
         tr.append( $("<td>").text(i + 1));
         tr.append( $("<td>").append( $("<a>").attr('href', track.uri).text(track.name)));
         tr.append( $("<td>").text(track.artists[0].name));
         tr.append( $("<td>").text(Math.round(track.score)));
-        table.append(tr);
+        newRows.push(tr);
     });
+    table.empty().append(newRows);
 }
 
 function saveTidsToPlaylist(playlist, tids) {
-    var url = "https://api.spotify.com/v1/users/" + playlist.owner.id + 
+    var url = "https://api.spotify.com/v1/users/" + playlist.owner.id +
          "/playlists/" + playlist.id + '/tracks';
 
     postSpotify(url, {uris: tids}, function(ok, data) {
@@ -363,7 +363,7 @@ function saveTidsToPlaylist(playlist, tids) {
             $("#ready-to-save").hide(100);
             $("#playlist-name").attr('href', playlist.uri);
         } else {
-            error("Trouble saving to the playlist"); 
+            error("Trouble saving to the playlist");
         }
     });
 }
@@ -402,7 +402,7 @@ function fetchAllTracksFromPlaylist() {
     $("#track-table").show();
     $("#ready-to-save").hide();
     $("#fetching-tracks").show();
-    
+
     allTracks = {};
 
     var queue = allPlaylists.slice(0);
@@ -433,8 +433,8 @@ function fetchAllTracksFromPlaylist() {
             var tinfo = queue.pop(0);
             var user = tinfo[0];
             var pid = tinfo[1];
-    
-            var url = "https://api.spotify.com/v1/users/" 
+
+            var url = "https://api.spotify.com/v1/users/"
                 + user + "/playlists/" + pid + "/tracks";
             callSpotify(url).then(
                 function(data) {
@@ -461,7 +461,7 @@ function fetchAllTracksFromPlaylist() {
                     }
                     refreshTrackList(allTracks);
                     fetchNextTracksFromPlaylist();
-                }, 
+                },
 
                 function() {
                     error("trouble fetching tracks");
@@ -531,7 +531,7 @@ function loginWithSpotify() {
 
     var url = 'https://accounts.spotify.com/authorize?client_id=' + client_id +
         '&response_type=token' +
-        '&scope=' + encodeURIComponent(scopes) + 
+        '&scope=' + encodeURIComponent(scopes) +
         '&redirect_uri=' + encodeURIComponent(redirect_uri);
     document.location = url;
 }
@@ -557,11 +557,11 @@ function performAuthDance() {
     if ('credentials' in localStorage) {
         credentials = JSON.parse(localStorage.credentials);
     }
-    
+
     if (credentials && credentials.expires > getTime()) {
         $("#search-form").show();
     } else {
-    // we have a token as a hash parameter in the url 
+    // we have a token as a hash parameter in the url
     // so parse hash
         var hash = location.hash.replace(/#/g, '');
         var all = hash.split('&');
@@ -594,7 +594,7 @@ function performAuthDance() {
                     localStorage['credentials'] = JSON.stringify(credentials);
                     location.hash = '';
                     $("#search-form").show();
-                }, 
+                },
                 function() {
                     error("Can't get user info");
                 }
