@@ -30,7 +30,7 @@ Here's how to run the scripts:
 
 To start using the new track frequency data, cp the ppm.js to the web directory
 
-% cp ppm.js
+% cp ppm.js ..
 
 
 
