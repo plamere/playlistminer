@@ -190,19 +190,6 @@ function info(s) {
     $("#info").text(s);
 }
 
-
-function addItem(tbody, which, item) {
-    var tr= $("<tr>");
-    var rowNumber = $("<td>").text(which);
-    var title = $("<a>").attr('href', item.uri).text(item.name);
-    var tracks = $("<td>").text(item.tracks.total);
-    tr.append(rowNumber);
-    tr.append(title);
-    tr.append(tracks);
-    $("#playlist-item").append(tr);
-    tbody.append(tr);
-}
-
 function callSpotify(url, data) {
     return $.ajax(url, {
         dataType: 'json',
@@ -239,49 +226,82 @@ function postSpotify(url, json, callback) {
 }
 
 
-function processPlaylists(data) {
-    var matching = data.playlists.total > maxPlaylists ? ">" + maxPlaylists : data.playlists.total;
-    $("#matching").text(matching);
-    var tbody = $("#playlist-items");
-    _.each(data.playlists.items, function(item, which) {
-        if (!item.collaborative) {
-            if (allPlaylists.length < maxPlaylistsToDisplay) {
-                addItem(tbody, data.playlists.offset + which + 1, item);
+function findMatchingPlaylists(text) {
+    var outstanding = 0;
+
+    function addItem(tbody, which, item) {
+        var tr= $("<tr>");
+        var rowNumber = $("<td>").text(which);
+        var title = $("<a>").attr('href', item.uri).text(item.name);
+        var tracks = $("<td>").text(item.tracks.total);
+        tr.append(rowNumber);
+        tr.append(title);
+        tr.append(tracks);
+        $("#playlist-item").append(tr);
+        tbody.append(tr);
+    }
+
+    function showSearchResults(data) {
+        outstanding--;
+
+        var matching = data.playlists.total > maxPlaylists ? ">" 
+            + maxPlaylists : data.playlists.total;
+        $("#matching").text(matching);
+        var tbody = $("#playlist-items");
+        _.each(data.playlists.items, function(item, which) {
+            if (true || !item.collaborative) {
+                if (allPlaylists.length < maxPlaylistsToDisplay) {
+                    addItem(tbody, data.playlists.offset + which + 1, item);
+                }
+                if (allPlaylists.length < maxPlaylists)  {
+                    allPlaylists.push( [item.owner.id, item.id]);
+                    totalTracks += item.tracks.total;
+                }
+            } else {
             }
-            if (allPlaylists.length < maxPlaylists)  {
-                allPlaylists.push( [item.owner.id, item.id]);
-                totalTracks += item.tracks.total;
+        });
+
+        var totalPlaylists = allPlaylists.length;
+        var total = Math.min(data.playlists.total, maxPlaylists);
+        var percentComplete = Math.round(totalPlaylists * 100 / total);
+
+        $(".total-tracks").text(totalTracks);
+        $(".total-playlists").text(totalPlaylists);
+        $("#playlist-progress").css('width', percentComplete + "%");
+
+        if (abortFetching || outstanding == 0) {
+            abortFetching = false;
+            if (totalPlaylists > 0) {
+                $('#fetch-tracks-ready').show(200);
+            } else {
+                info("No matching playlists found");
+                $('#fetch-tracks-ready').show(200);
             }
-        } else {
-        }
-    });
-
-    var totalPlaylists = allPlaylists.length;
-    var total = Math.min(data.playlists.total, maxPlaylists);
-    var percentComplete = Math.round(totalPlaylists * 100 / total);
-
-    $(".total-tracks").text(totalTracks);
-    $(".total-playlists").text(totalPlaylists);
-    $("#playlist-progress").css('width', percentComplete + "%");
-
-    if (allPlaylists.length < maxPlaylists && data.playlists.next && !abortFetching) {
-        callSpotify(data.playlists.next).then(processPlaylists, processPlaylistError);
-    } else {
-        abortFetching = false;
-        if (totalPlaylists > 0) {
-            $('#fetch-tracks-ready').show(200);
-        } else {
-            info("No matching playlists found");
-            $('#fetch-tracks-ready').show(200);
         }
     }
-}
 
-function processPlaylistError() {
-    error("Can't get playlists");
-}
+    function processPlaylistError() {
+        outstanding--;
+        error("Can't get playlists");
+    }
 
-function findMatchingPlaylists(text) {
+    function processPlaylists(data) {
+        var total = Math.min(data.playlists.total, maxPlaylists);
+        var offset = data.playlists.offset + data.playlists.items.length;
+        for (var i = offset; i < total; i += 50) {
+            var url = 'https://api.spotify.com/v1/search';
+            var params = {
+                q: text,
+                type:'playlist',
+                limit:data.playlists.limit,
+                offset:i
+            };
+            outstanding++;
+            callSpotify(url, params).then(showSearchResults, processPlaylistError);
+        }
+        showSearchResults(data);
+    }
+
     totalTracks = 0;
     abortFetching = false;
     allPlaylists = [];
@@ -290,12 +310,15 @@ function findMatchingPlaylists(text) {
     var url = 'https://api.spotify.com/v1/search';
     var params = {
         q: text,
-        type:'playlist'
+        type:'playlist',
+        limit:50
     };
     var offset = 0;
     $("#playlist-items").empty();
+    outstanding++;
     callSpotify(url, params).then(processPlaylists, processPlaylistError);
 }
+
 
 function go() {
     $("#top").hide(200);
@@ -392,11 +415,8 @@ function getPlaylistTitle() {
 }
 
 
-function fetchCurrentUserProfile() {
-    return callSpotify(url);
-}
-
 function fetchAllTracksFromPlaylist() {
+    var start = new Date().getTime();
     $(".results").hide();
     $("#track-table").show();
     $("#ready-to-save").hide();
@@ -427,18 +447,38 @@ function fetchAllTracksFromPlaylist() {
     }
 
 
+    function doneFetching() {
+        abortFetching = false;
+        $("#fetching-tracks").hide(100);
+        if (topTracks.length == 0) {
+            info("No matching tracks found");
+        } else {
+            $("#ready-to-save").show();
+        }
+        var end = new Date().getTime();
+        var total = end - start;
+        console.log('delta time', total, 'len', 
+            allPlaylists.length, 'per 1000', Math.round(total / allPlaylists.length));
+
+    }
+
+    var outstanding = 0;
+    var maxSimultaneous = 10;
+
     function fetchNextTracksFromPlaylist() {
-        if (!abortFetching && queue.length > 0) {
+        while (!abortFetching && queue.length > 0 && outstanding < maxSimultaneous) {
             var tinfo = queue.pop(0);
             var user = tinfo[0];
             var pid = tinfo[1];
 
             var url = "https://api.spotify.com/v1/users/"
                 + user + "/playlists/" + pid + "/tracks";
+            outstanding++;
             callSpotify(url).then(
                 function(data) {
-                    // TODO deal with next
-                    var progress = Math.round((allPlaylists.length - queue.length) * 100 / allPlaylists.length);
+                    var remaining = outstanding + queue.length;
+                    var progress = Math.round(100.0 - (100.0 * remaining / allPlaylists.length));
+
                     $("#track-progress").css('width', progress + "%");
                     $("#tt-total-tracks").text(totalTracks);
                     $("#tt-unique-tracks").text(Object.keys(allTracks).length);
@@ -458,24 +498,28 @@ function fetchAllTracksFromPlaylist() {
                         });
                     } else {
                     }
+
                     refreshTrackList(allTracks);
-                    fetchNextTracksFromPlaylist();
+
+                    --outstanding;
+                    if (outstanding <= 0 && (abortFetching ||queue.length == 0)) {
+                        doneFetching();
+                    }  else {
+                        fetchNextTracksFromPlaylist();
+                    }
                 },
 
                 function() {
                     error("trouble fetching tracks");
-                    fetchNextTracksFromPlaylist();
+                    --outstanding;
+                    if (outstanding <= 0 && (abortFetching || queue.length == 0)) {
+                        doneFetching();
+                    }  else {
+                        fetchNextTracksFromPlaylist();
+                    }
                 }
             );
-        } else {
-            abortFetching = false;
-            $("#fetching-tracks").hide(100);
-            if (topTracks.length == 0) {
-                info("No matching tracks found");
-            } else {
-                $("#ready-to-save").show();
-            }
-        }
+        } 
     }
     fetchNextTracksFromPlaylist();
 }
