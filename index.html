@@ -142,7 +142,7 @@
           <table class="table table-striped table-bordered">
             <thead>
                 <tr> <th style="width:5%"> # </th>
-                     <th style="width:50%"> Title </th>
+                     <th style="width:40%"> Title </th>
                      <th style="width:35%"> Artist </th>
                      <th style="width:10%"> Score</th> </tr>
             </thead>
@@ -334,19 +334,36 @@ function go() {
     }
 }
 
-function getTrackScore(track) {
+function old_getTrackScore(track) {
     if (popNormalize) {
         var ppm_score;
         if (track.id in ppm) {
             ppm_score = ppm[track.id];
         } else {
-            ppm_score = ppm['backoff_idf'];
+            // ppm_score = 1 / ppm['total'];
+            ppm_score = 10;
         }
-        var score = 1000. * track.count / totalPlaylistCount * ppm_score;
+        var score = 10.0 * track.count / ppm_score;
         return score
     } else {
         return track.count;
     }
+}
+
+function new_getTrackScore(track) {
+    if (popNormalize) {
+        var ppm_score;
+        var factor = track.popularity  > 30 ? track.popularity : 30;
+        factor = factor * factor;
+        var score = 1000. * track.count / factor;
+        return score;
+    } else {
+        return track.count;
+    }
+}
+
+function getTrackScore(track) { 
+    return old_getTrackScore(track);
 }
 
 function refreshTrackList(allTracks) {
@@ -484,14 +501,15 @@ function fetchAllTracksFromPlaylist() {
                     $("#tt-unique-tracks").text(Object.keys(allTracks).length);
                     if (isGoodPlaylist(data.items)) {
                         totalPlaylistCount += 1;
-                        _.each(data.items, function(item) {
+                        _.each(data.items, function(item, i) {
+                            var count = i == 0 ? 3 : i <= 2 ? 1 : 1;
                             if (item.track) {
                                 if (item.track.id) {
                                     if ( !(item.track.id in allTracks) ) {
                                         allTracks[item.track.id] = item.track;
                                         allTracks[item.track.id].count = 0;
                                     }
-                                    allTracks[item.track.id].count += 1;
+                                    allTracks[item.track.id].count += count;
                                     totalTracks += 1;
                                 }
                             }
