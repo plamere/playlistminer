@@ -170,7 +170,6 @@
 var maxPlaylists = 1000;
 var maxPlaylistsToDisplay = 1000;
 var credentials = null;
-var ppm = null;
 
 var totalTracks = 0;
 var totalPlaylistCount = 0;
@@ -232,7 +231,7 @@ function findMatchingPlaylists(text) {
     function addItem(tbody, which, item) {
         var tr= $("<tr>");
         var rowNumber = $("<td>").text(which);
-        var title = $("<a>").attr('href', item.uri).text(item.name);
+        var title = $("<td>").append($("<a>").attr('href', item.uri).text(item.name));
         var tracks = $("<td>").text(item.tracks.total);
         tr.append(rowNumber);
         tr.append(title);
@@ -334,25 +333,8 @@ function go() {
     }
 }
 
-function old_getTrackScore(track) {
-    if (popNormalize) {
-        var ppm_score;
-        if (track.id in ppm) {
-            ppm_score = ppm[track.id];
-        } else {
-            // ppm_score = 1 / ppm['total'];
-            ppm_score = 10;
-        }
-        var score = 10.0 * track.count / ppm_score;
-        return score
-    } else {
-        return track.count;
-    }
-}
-
 function new_getTrackScore(track) {
     if (popNormalize) {
-        var ppm_score;
         var factor = track.popularity  > 30 ? track.popularity : 30;
         factor = factor * factor;
         var score = 1000. * track.count / factor;
@@ -363,7 +345,8 @@ function new_getTrackScore(track) {
 }
 
 function getTrackScore(track) { 
-    return old_getTrackScore(track);
+    //return old_getTrackScore(track);
+    return new_getTrackScore(track);
 }
 
 function refreshTrackList(allTracks) {
@@ -576,8 +559,6 @@ function initApp() {
         popNormalize = $("#norm-for-pop").is(':checked');
         refreshTrackList(allTracks);
     });
-
-    loadPPM();
 }
 
 
@@ -600,17 +581,6 @@ function loginWithSpotify() {
 
 function getTime() {
     return Math.round(new Date().getTime() / 1000);
-}
-
-function loadPPM() {
-    $.getJSON('ppm.js').then(
-        function(data) {
-            ppm = data;
-        },
-        function() {
-            error("can't load ppm");
-        }
-    );
 }
 
 function performAuthDance() {
