@@ -1,0 +1,2 @@
+rsync -azv . plamere@playlistmachinery.com:/home/www/playlistminer
+#s3cmd sync --acl-public *  s3://static.echonest.com/OrganizeYourMusic/
