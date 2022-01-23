@@ -10,6 +10,6 @@ all of the songs across all of these playlists and find the top 100 songs that o
 most frequently in the matching playlist. These top songs can then be saved
 to your own playlist.
 
-The Playlist Miner is online at http://static.echonest.com/playlistminer/index.html
+The Playlist Miner is online at http://playlistminer.playlistmachinery.com/
 
 It makes use of the Spotify Web API.
