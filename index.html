@@ -18,16 +18,12 @@
 </head>
   <body >
     <div class="navbar navbar-default" role="navigation">
-      <div class="container">
+      <div class="container-fluid">
         <div class="navbar-header">
           <a class="navbar-brand" href="index.html">
             <span class="navbar-title">Playlist Miner</span>
           </a>
         </div>
-        <div class="navbar-collapse collapse">
-          <a href="http://www.spotify.com" class="btn btn-primary navbar-btn navbar-right">Get
-          Spotify</a>
-        </div><!--/.navbar-collapse -->
       </div>
     </div>
 
@@ -85,7 +81,7 @@
               Press
               <b> Find top tracks </b> to build a playlist of the top tracks
               across all of these playlists or go back and
-              <a href="index.html">refine your query</a>.
+              <a href="index.html" style="font-size:1.2em; font-weight:bold">refine your query</a>.
               <div class='obutton-row'>
                   <button id='fetch-tracks' class='btn btn-primary'>  Find top tracks</button>
               </div>
@@ -153,7 +149,7 @@
       <div class="container text-center">
             <p class="text-muted">
                 Powered by <a href="http://spotify.com">Spotify</a>.
-                Created by <a href="http://twitter.com/plamere">@plamere</a>.
+                Created by <a href="https://bsky.app/profile/plamere.bsky.social">@plamere</a>.
                 More info at  <a href="http://musicmachinery.com/2014/12/19/the-playlist-miner/">MusicMachinery</a>.
             </p>
       </div>
@@ -161,13 +157,15 @@
     <script src="lib/jquery-1.11.1.min.js"></script>
     <script src="lib/bootstrap.min.js"></script>
     <script src="lib/underscore-min.js"></script>
+    <script src="config.js"></script>
 
 <script>
 "use strict";
 
 var maxPlaylists = 1000;
 var maxPlaylistsToDisplay = 1000;
-var credentials = null;
+var accessToken = null;
+var userId = null;
 
 var totalTracks = 0;
 var totalPlaylistCount = 0;
@@ -192,7 +190,7 @@ function callSpotify(url, data) {
         dataType: 'json',
         data: data,
         headers: {
-            'Authorization': 'Bearer ' + credentials.token
+            'Authorization': 'Bearer ' + accessToken
         }
     });
 }
@@ -203,7 +201,7 @@ function postSpotify(url, json, callback) {
         data: JSON.stringify(json),
         dataType: 'json',
         headers: {
-            'Authorization': 'Bearer ' + credentials.token,
+            'Authorization': 'Bearer ' + accessToken,
             'Content-Type': 'application/json'
         },
         success: function(r) {
@@ -224,7 +222,7 @@ function postSpotify(url, json, callback) {
 
 
 function findMatchingPlaylists(text) {
-    var outstanding = 0;
+    var maxPercent = 0;
 
     function addItem(tbody, which, item) {
         var tr= $("<tr>");
@@ -239,70 +237,59 @@ function findMatchingPlaylists(text) {
     }
 
     function showSearchResults(data) {
-        outstanding--;
-
-        var matching = data.playlists.total > maxPlaylists ? ">" 
-            + maxPlaylists : data.playlists.total;
-        $("#matching").text(matching);
+        console.log('search results', 'offset:', data.playlists.offset,
+            'limit:', data.playlists.limit, 'total:', data.playlists.total,
+            'items:', data.playlists.items.length, 'next:', data.playlists.next);
         var tbody = $("#playlist-items");
         _.each(data.playlists.items, function(item, which) {
-            if (true || !item.collaborative) {
-                if (allPlaylists.length < maxPlaylistsToDisplay) {
-                    addItem(tbody, data.playlists.offset + which + 1, item);
-                }
-                if (allPlaylists.length < maxPlaylists)  {
-                    allPlaylists.push( [item.owner.id, item.id]);
-                    totalTracks += item.tracks.total;
-                }
-            } else {
+            if (allPlaylists.length < maxPlaylistsToDisplay) {
+                addItem(tbody, data.playlists.offset + which + 1, item);
+            }
+            if (allPlaylists.length < maxPlaylists)  {
+                allPlaylists.push( [item.owner.id, item.id]);
+                totalTracks += item.tracks.total;
             }
         });
 
         var totalPlaylists = allPlaylists.length;
         var total = Math.min(data.playlists.total, maxPlaylists);
         var percentComplete = Math.round(totalPlaylists * 100 / total);
+        maxPercent = Math.max(maxPercent, percentComplete);
 
         $(".total-tracks").text(totalTracks);
         $(".total-playlists").text(totalPlaylists);
-        $("#playlist-progress").css('width', percentComplete + "%");
+        $("#playlist-progress").css('width', maxPercent + "%");
+    }
 
-        if (abortFetching || outstanding == 0) {
-            abortFetching = false;
-            if (totalPlaylists > 0) {
-                $('#fetch-tracks-ready').show(200);
-            } else {
-                info("No matching playlists found");
-                $('#fetch-tracks-ready').show(200);
+    function fetchNextPage(url, params) {
+        callSpotify(url, params).then(
+            function(data) {
+                showSearchResults(data);
+                if (!abortFetching && data.playlists.next && allPlaylists.length < maxPlaylists) {
+                    fetchNextPage(data.playlists.next);
+                } else {
+                    if (allPlaylists.length > 0) {
+                        $('#fetch-tracks-ready').show(200);
+                    } else {
+                        info("No matching playlists found");
+                        $('#fetch-tracks-ready').show(200);
+                    }
+                }
+            },
+            function() {
+                error("Can't get playlists");
+                if (allPlaylists.length > 0) {
+                    $('#fetch-tracks-ready').show(200);
+                }
             }
-        }
-    }
-
-    function processPlaylistError() {
-        outstanding--;
-        error("Can't get playlists");
-    }
-
-    function processPlaylists(data) {
-        var total = Math.min(data.playlists.total, maxPlaylists);
-        var offset = data.playlists.offset + data.playlists.items.length;
-        for (var i = offset; i < total; i += 50) {
-            var url = 'https://api.spotify.com/v1/search';
-            var params = {
-                q: text,
-                type:'playlist',
-                limit:data.playlists.limit,
-                offset:i
-            };
-            outstanding++;
-            callSpotify(url, params).then(showSearchResults, processPlaylistError);
-        }
-        showSearchResults(data);
+        );
     }
 
     totalTracks = 0;
     abortFetching = false;
     allPlaylists = [];
     $('#fetch-tracks-ready').hide();
+    $("#playlist-items").empty();
 
     var url = 'https://api.spotify.com/v1/search';
     var params = {
@@ -310,10 +297,7 @@ function findMatchingPlaylists(text) {
         type:'playlist',
         limit:50
     };
-    var offset = 0;
-    $("#playlist-items").empty();
-    outstanding++;
-    callSpotify(url, params).then(processPlaylists, processPlaylistError);
+    fetchNextPage(url, params);
 }
 
 
@@ -396,7 +380,7 @@ function savePlaylist() {
         tids.push(track.uri);
     });
 
-    var url = "https://api.spotify.com/v1/users/" + credentials.user_id + "/playlists";
+    var url = "https://api.spotify.com/v1/users/" + userId + "/playlists";
     var json = { name: title};
 
     postSpotify(url, json, function(ok, playlist) {
@@ -461,64 +445,81 @@ function fetchAllTracksFromPlaylist() {
     }
 
     var outstanding = 0;
-    var maxSimultaneous = 10;
+    var maxSimultaneous = 3;
 
-    function fetchNextTracksFromPlaylist() {
-        while (!abortFetching && queue.length > 0 && outstanding < maxSimultaneous) {
-            var tinfo = queue.pop(0);
-            var user = tinfo[0];
-            var pid = tinfo[1];
+    function processTrackData(data) {
+        var remaining = outstanding + queue.length;
+        var progress = Math.round(100.0 - (100.0 * remaining / allPlaylists.length));
 
-            var url = "https://api.spotify.com/v1/users/"
-                + user + "/playlists/" + pid + "/tracks";
-            outstanding++;
-            callSpotify(url).then(
-                function(data) {
-                    var remaining = outstanding + queue.length;
-                    var progress = Math.round(100.0 - (100.0 * remaining / allPlaylists.length));
-
-                    $("#track-progress").css('width', progress + "%");
-                    $("#tt-total-tracks").text(totalTracks);
-                    $("#tt-unique-tracks").text(Object.keys(allTracks).length);
-                    if (isGoodPlaylist(data.items)) {
-                        totalPlaylistCount += 1;
-                        _.each(data.items, function(item, i) {
-                            var count = i == 0 ? 3 : i <= 2 ? 1 : 1;
-                            if (item.track) {
-                                if (item.track.id) {
-                                    if ( !(item.track.id in allTracks) ) {
-                                        allTracks[item.track.id] = item.track;
-                                        allTracks[item.track.id].count = 0;
-                                    }
-                                    allTracks[item.track.id].count += count;
-                                    totalTracks += 1;
-                                }
-                            }
-                        });
-                    } else {
+        $("#track-progress").css('width', progress + "%");
+        $("#tt-total-tracks").text(totalTracks);
+        $("#tt-unique-tracks").text(Object.keys(allTracks).length);
+        if (isGoodPlaylist(data.items)) {
+            totalPlaylistCount += 1;
+            _.each(data.items, function(item, i) {
+                var count = i == 0 ? 3 : i <= 2 ? 1 : 1;
+                if (item.track) {
+                    if (item.track.id) {
+                        if ( !(item.track.id in allTracks) ) {
+                            allTracks[item.track.id] = item.track;
+                            allTracks[item.track.id].count = 0;
+                        }
+                        allTracks[item.track.id].count += count;
+                        totalTracks += 1;
                     }
+                }
+            });
+        }
+        refreshTrackList(allTracks);
+    }
 
-                    refreshTrackList(allTracks);
-
+    function fetchPlaylist(url) {
+        outstanding++;
+        $.ajax(url, {
+            dataType: 'json',
+            headers: { 'Authorization': 'Bearer ' + accessToken },
+            success: function(data) {
+                processTrackData(data);
+                --outstanding;
+                if (outstanding <= 0 && (abortFetching || queue.length == 0)) {
+                    doneFetching();
+                } else {
+                    fetchNextTracksFromPlaylist();
+                }
+            },
+            error: function(xhr) {
+                if (xhr.status === 429) {
                     --outstanding;
-                    if (outstanding <= 0 && (abortFetching ||queue.length == 0)) {
-                        doneFetching();
-                    }  else {
+                    var retryAfter = parseInt(xhr.getResponseHeader('Retry-After') || '2');
+                    queue.push(url);
+                    setTimeout(function() {
                         fetchNextTracksFromPlaylist();
-                    }
-                },
-
-                function() {
-                    error("trouble fetching tracks");
+                    }, retryAfter * 1000);
+                } else {
                     --outstanding;
                     if (outstanding <= 0 && (abortFetching || queue.length == 0)) {
                         doneFetching();
-                    }  else {
+                    } else {
                         fetchNextTracksFromPlaylist();
                     }
                 }
-            );
-        } 
+            }
+        });
+    }
+
+    function fetchNextTracksFromPlaylist() {
+        while (!abortFetching && queue.length > 0 && outstanding < maxSimultaneous) {
+            var next = queue.pop(0);
+            if (typeof next === 'string') {
+                fetchPlaylist(next);
+            } else {
+                var user = next[0];
+                var pid = next[1];
+                var url = "https://api.spotify.com/v1/users/"
+                    + user + "/playlists/" + pid + "/tracks";
+                fetchPlaylist(url);
+            }
+        }
     }
     fetchNextTracksFromPlaylist();
 }
@@ -547,7 +548,7 @@ function initApp() {
     });
 
     $("#login-button").on('click', function() {
-        loginWithSpotify();
+        authorizeUser();
     });
     $("#save-button").on('click', function() {
         savePlaylist();
@@ -560,86 +561,134 @@ function initApp() {
 }
 
 
-function loginWithSpotify() {
-    var client_id = '4042a231fe624583a694f1d6cf9e25b5';
-    var redirect_uri = 'http://playlistminer.playlistmachinery.com/';
+function generateRandomString(length) {
+    var possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    var values = crypto.getRandomValues(new Uint8Array(length));
+    return Array.from(values).reduce(function(acc, x) { return acc + possible[x % possible.length]; }, "");
+}
+
+function sha256(plain) {
+    var encoder = new TextEncoder();
+    var data = encoder.encode(plain);
+    return window.crypto.subtle.digest('SHA-256', data);
+}
+
+function base64encode(input) {
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(input)))
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+}
+
+async function authorizeUser() {
     var scopes = 'playlist-modify-public';
+    var codeVerifier = generateRandomString(64);
+    window.localStorage.setItem('code_verifier', codeVerifier);
 
-    if (document.location.hostname == 'localhost') {
-        redirect_uri = 'http://localhost:8000/index.html';
-    }
+    var hashed = await sha256(codeVerifier);
+    var codeChallenge = base64encode(hashed);
 
-    var url = 'https://accounts.spotify.com/authorize?client_id=' + client_id +
-        '&response_type=token' +
+    var authUrl = 'https://accounts.spotify.com/authorize?' +
+        'client_id=' + encodeURIComponent(SPOTIFY_CLIENT_ID) +
+        '&response_type=code' +
+        '&show_dialog=false' +
         '&scope=' + encodeURIComponent(scopes) +
-        '&redirect_uri=' + encodeURIComponent(redirect_uri);
-    document.location = url;
+        '&redirect_uri=' + encodeURIComponent(SPOTIFY_REDIRECT_URI) +
+        '&code_challenge_method=S256' +
+        '&code_challenge=' + encodeURIComponent(codeChallenge);
+
+    document.location = authUrl;
 }
 
-
-function getTime() {
-    return Math.round(new Date().getTime() / 1000);
-}
-
-function performAuthDance() {
-    // if we already have a token and it hasn't expired, use it,
-    if ('credentials' in localStorage) {
-        credentials = JSON.parse(localStorage.credentials);
-    }
-
-    if (credentials && credentials.expires > getTime()) {
-        $("#search-form").show();
-    } else {
-    // we have a token as a hash parameter in the url
-    // so parse hash
-        var hash = location.hash.replace(/#/g, '');
-        var all = hash.split('&');
-        var args = {};
-
-        all.forEach(function(keyvalue) {
-            var idx = keyvalue.indexOf('=');
-            var key = keyvalue.substring(0, idx);
-            var val = keyvalue.substring(idx + 1);
-            args[key] = val;
-        });
-
-        if (typeof(args['access_token']) != 'undefined') {
-            var g_access_token = args['access_token'];
-            var expiresAt = getTime() + 3600;
-
-            if (typeof(args['expires_in']) != 'undefined') {
-                var expires = parseInt(args['expires_in']);
-                expiresAt = expires + getTime();
-            }
-
-            credentials = {
-                token:g_access_token,
-                expires:expiresAt
-            }
-
-            callSpotify('https://api.spotify.com/v1/me').then(
-                function(user) {
-                    credentials.user_id = user.id;
-                    localStorage['credentials'] = JSON.stringify(credentials);
-                    location.hash = '';
-                    $("#search-form").show();
-                },
-                function() {
-                    error("Can't get user info");
-                }
-            );
-        } else {
-    // otherwise, got to spotify to get auth
-            $("#login-form").show();
+function exchangeCodeForToken(code) {
+    var codeVerifier = window.localStorage.getItem('code_verifier');
+    return $.ajax('https://accounts.spotify.com/api/token', {
+        type: 'POST',
+        data: $.param({
+            client_id: SPOTIFY_CLIENT_ID,
+            grant_type: 'authorization_code',
+            code: code,
+            redirect_uri: SPOTIFY_REDIRECT_URI,
+            code_verifier: codeVerifier
+        }),
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
         }
-    }
+    });
+}
+
+function refreshAccessToken(refreshToken) {
+    return $.ajax('https://accounts.spotify.com/api/token', {
+        type: 'POST',
+        data: $.param({
+            client_id: SPOTIFY_CLIENT_ID,
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken
+        }),
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+    });
 }
 
 
 $(document).ready(
     function() {
         initApp();
-        performAuthDance();
+
+        var urlParams = new URLSearchParams(window.location.search);
+        var code = urlParams.get('code');
+        var authError = urlParams.get('error');
+
+        if (authError) {
+            error("Authorization was denied");
+            $("#login-form").show();
+        } else if (code) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            exchangeCodeForToken(code).then(function(response) {
+                accessToken = response.access_token;
+                if (response.refresh_token) {
+                    window.localStorage.setItem('refresh_token', response.refresh_token);
+                }
+                callSpotify('https://api.spotify.com/v1/me').then(
+                    function(user) {
+                        userId = user.id;
+                        $("#search-form").show();
+                    },
+                    function() {
+                        error("Can't get user info");
+                    }
+                );
+            }).fail(function() {
+                error("Failed to exchange authorization code for token");
+                $("#login-form").show();
+            });
+        } else {
+            var refreshToken = window.localStorage.getItem('refresh_token');
+            if (refreshToken) {
+                refreshAccessToken(refreshToken).then(function(response) {
+                    accessToken = response.access_token;
+                    if (response.refresh_token) {
+                        window.localStorage.setItem('refresh_token', response.refresh_token);
+                    }
+                    callSpotify('https://api.spotify.com/v1/me').then(
+                        function(user) {
+                            userId = user.id;
+                            $("#search-form").show();
+                        },
+                        function() {
+                            error("Can't get user info");
+                            $("#login-form").show();
+                        }
+                    );
+                }).fail(function() {
+                    window.localStorage.removeItem('refresh_token');
+                    $("#login-form").show();
+                });
+            } else {
+                $("#login-form").show();
+            }
+        }
     }
 );
 
