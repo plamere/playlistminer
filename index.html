@@ -255,28 +255,40 @@ function findMatchingPlaylists(text) {
         $("#playlist-progress").css('width', maxPercent + "%");
     }
 
+    function searchDone() {
+        if (allPlaylists.length > 0) {
+            $('#fetch-tracks-ready').show(200);
+        } else {
+            info("No matching playlists found");
+            $('#fetch-tracks-ready').show(200);
+        }
+    }
+
     function fetchNextPage(url, params) {
-        callSpotify(url, params).then(
-            function(data) {
+        $.ajax(url, {
+            dataType: 'json',
+            data: params,
+            headers: { 'Authorization': 'Bearer ' + accessToken },
+            success: function(data) {
                 showSearchResults(data);
                 if (!abortFetching && data.playlists.next && allPlaylists.length < maxPlaylists) {
                     fetchNextPage(data.playlists.next);
                 } else {
-                    if (allPlaylists.length > 0) {
-                        $('#fetch-tracks-ready').show(200);
-                    } else {
-                        info("No matching playlists found");
-                        $('#fetch-tracks-ready').show(200);
-                    }
+                    searchDone();
                 }
             },
-            function() {
-                error("Can't get playlists");
-                if (allPlaylists.length > 0) {
-                    $('#fetch-tracks-ready').show(200);
+            error: function(xhr) {
+                if (xhr.status === 429) {
+                    var retryAfter = parseInt(xhr.getResponseHeader('Retry-After') || '2');
+                    setTimeout(function() {
+                        fetchNextPage(url, params);
+                    }, retryAfter * 1000);
+                } else {
+                    error("Can't get playlists");
+                    searchDone();
                 }
             }
-        );
+        });
     }
 
     totalTracks = 0;
@@ -439,7 +451,7 @@ function fetchAllTracksFromPlaylist() {
     }
 
     var outstanding = 0;
-    var maxSimultaneous = 3;
+    var maxSimultaneous = 6;
 
     function processTrackData(data) {
         var remaining = outstanding + queue.length;
