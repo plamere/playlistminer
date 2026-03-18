@@ -11,18 +11,18 @@ The Playlist Miner is a client-side web app that finds the most popular tracks a
 **Single-page app** — all application logic lives inline in `index.html` as vanilla JavaScript (jQuery + Underscore.js). There is no build step, bundler, or framework.
 
 ### Key flow:
-1. **Auth**: Spotify OAuth implicit grant flow (`loginWithSpotify()` / `performAuthDance()`). Credentials cached in `localStorage`.
-2. **Playlist search**: `findMatchingPlaylists()` — searches Spotify API for playlists matching keywords, paginating up to `maxPlaylists` (1000) results with up to 50 concurrent requests.
-3. **Track aggregation**: `fetchAllTracksFromPlaylist()` — fetches tracks from each playlist (max 10 simultaneous requests), counts occurrences, filters out "mono" playlists (single artist/album). Tracks scored by raw count or distinctiveness.
+1. **Auth**: Spotify OAuth Authorization Code + PKCE flow (`authorizeUser()` / `exchangeCodeForToken()`). Refresh token cached in `localStorage` for session persistence across page loads.
+2. **Playlist search**: `findMatchingPlaylists()` — searches Spotify API for playlists matching keywords, paging sequentially via Spotify's `next` URL. Includes 429 retry with `Retry-After` backoff.
+3. **Track aggregation**: `fetchAllTracksFromPlaylist()` — fetches tracks from each playlist (max 6 simultaneous requests with 429 retry/backoff), counts occurrences, filters out "mono" playlists (single artist/album).
 4. **Scoring**: `getTrackScore()` — either raw count or popularity-normalized score (toggled by "Prefer more distinctive tracks" checkbox).
 5. **Save**: `savePlaylist()` — creates a new Spotify playlist and adds the top 100 tracks.
 
 ### Files:
 - `index.html` — the entire app (HTML + inline JS)
+- `config.js` — Spotify client ID and redirect URI (auto-detects localhost vs production)
 - `styles.css` — custom styles
-- `dist/` — Spotify-themed Bootstrap CSS and fonts
+- `dist/` — Spotify-themed Bootstrap CSS and fonts (only `sp-bootstrap.min.css` and glyphicons are used)
 - `lib/` — vendored jQuery 1.11.1, Bootstrap, Underscore.js
-- `redirect.html` — legacy redirect from old "CrowdLister" name
 
 ### Scripts (`scripts/`):
 Python 2 scripts for generating track popularity data used for the "distinctiveness" scoring feature:
@@ -31,24 +31,33 @@ Python 2 scripts for generating track popularity data used for the "distinctiven
 
 ## Development
 
-Serve locally with any static file server:
+Serve locally with any static file server on port 8000:
 ```
 python -m http.server 8000
-# or
-python -m SimpleHTTPServer 8000
 ```
 
-The app auto-detects localhost and adjusts the OAuth redirect URI accordingly.
+The whitelisted local redirect URI is `http://127.0.0.1:8000/` — access the app via that address, not `localhost`.
 
 ## Deployment
 
-Two deploy scripts exist:
-- `deploy` — syncs to S3 (`s3://static.echonest.com/playlistminer/`)
-- `deploy2` — rsyncs to `playlistmachinery.com`
+```
+./deploy
+```
+
+Rsyncs to `/home/www/playlistminer/` on the production Linode (50.116.51.150), excluding `.git`, `CLAUDE.md`, `README.md`, and `scripts/`.
+
+The server runs nginx with SSL via Let's Encrypt/Certbot. Config is at `/etc/nginx/sites-available/playlistminer`.
 
 ## Key Details
 
-- Spotify client ID is hardcoded in `index.html` (`loginWithSpotify()`)
-- OAuth redirect URI for production: `http://playlistminer.playlistmachinery.com/`
+- Spotify client ID and redirect URIs are in `config.js`
+- Production URL: `https://playlistminer.playlistmachinery.com/`
 - No tests, no linter, no build process
 - The `scripts/` directory uses Python 2 (cPickle, print statements)
+- Sister app OrganizeYourMusic (`../OrganizeYourMusic`) uses the same auth pattern
+
+## Spotify API Notes
+
+- Search API caps results for generic/popular terms (e.g. "chill" returns ~150 results while "chill beats" returns ~800) — this is a Spotify-side limitation
+- Rate limiting (429s) is common with concurrent requests — both search and track fetch loops include retry with `Retry-After` backoff
+- Always page search results sequentially using the `next` URL from each response, not by calculating offsets upfront
